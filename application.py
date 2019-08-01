@@ -54,6 +54,9 @@ def register():
     p1 = request.form.get("password")
     p2 = request.form.get("confirmation")
 
+    for num in range(10):
+        print(db.execute("SELECT * FROM users").fetchall())
+
     # User reached route via POST (as by submitting a form via POST)
     if request.method == "POST":
 
@@ -71,14 +74,19 @@ def register():
         elif p1 != p2:
             message = "Passwords do not match."
             return render_template("status.html", message=message, block_title=block_title[0]), 400
-        
+        elif not user_email:
+            message = "Email not provided"
+            return render_template("status.html", message=message, block_title=block_title[0]), 400
+        elif "@" not in user_email or (".com" or ".net") not in user_email:
+            message = "Not a valid email"
+            return render_template("status.html", message=message, block_title=block_title[0]), 400
         # Our district gives us our own emails so it would be preferable
         # to use those emails in order to grant access.
         # Of course during my testing I disabled this.
         # TODO UNCOMMENT
-        elif "@cpsd.us" not in user_email:
-            message = "Your email is not valid on this website."
-            return render_template("status.html", message=message, block_title=block_title[0]), 400
+        #elif "@cpsd.us" not in user_email:
+        #    message = "Your email is not valid on this website."
+        #    return render_template("status.html", message=message, block_title=block_title[0]), 400
 
         # So since I only need one username to check its existance this is what I did
         # It returns "None" if nothing is found, but will return a profile if it is not empty
@@ -100,8 +108,8 @@ def register():
         hashed_password = generate_password_hash(p1)
         
         # If everything passed then insert user creds into the table 
-        db.execute("INSERT INTO users (username, password) VALUES (:username, :hashed_password)",
-         {"username": user_inp, "hashed_password": hashed_password})
+        db.execute("INSERT INTO users (username, email, password) VALUES (:username, :email, :hashed_password)",
+         {"username": user_inp, "email": user_email, "hashed_password": hashed_password})
         
         # Commit and add data into table
         db.commit()
@@ -153,7 +161,7 @@ def login():
         session["user_id"] = rows[0]
 
         # Redirect user to search page
-        return redirect(url_for("search"))
+        return redirect(url_for("index"))
 
     # User reached route via GET (as by clicking a link or via redirect)
     else:
@@ -168,13 +176,22 @@ def logout():
     message = "Logged out!"
     return render_template("status.html", message=message, block_title=block_title[2])
 
-
-@login_required
-def post():
+@app.route("/create_post")
+def create_post():
     user_id = session["user_id"]
     check_super_user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id":user_id}).fetchone()
     if check_super_user:
         print(check_super_user)
+
+
+@app.route("/post_list")
+def list_posts():
+    post_list = db.execute("SELECT * FROM posts").fetchall()
+
+
+@app.route("/posts/<post_id>")
+def post(post_id):
+    post = db.execute("SELECT * FROM posts WHERE post_id = :post_id", {"post_id": post_id}).fetchone()
 
 
 @app.route("/search", methods=["GET", "POST"])
