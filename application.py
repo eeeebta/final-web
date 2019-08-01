@@ -181,6 +181,7 @@ def post():
 @login_required
 def search():
 
+    # Test
     if request.method == "POST":
 
         if not request.form.get("query"):
