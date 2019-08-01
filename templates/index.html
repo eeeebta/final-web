@@ -1,0 +1,37 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Home
+{% endblock %}
+
+{% block main %}
+    <div name="heading" class="text-center">
+        <h1>
+            CS50: Final Project
+        </h1>
+        <small>
+            Hello! This is my CS50 Final Project!
+        </small>
+    </div>
+    <hr>
+    <div class="text-center">
+        <p>
+            This project is a web application that is sort of akin to a blog in a way that I
+            will be utilzing throughout my remaining high school years at CRLS.
+            <br>
+            More specifically I will be using this to showcase and explain all of my personal projects and probably will have friends as well use this website.
+            This website as a whole will probably be worked on as well since I did not have the most time to make this project.
+            This website will only allow people with emails from the same district as me, but I have disabled it here for demonstration purposes.
+        </p>
+        {% if not session.user_id %}
+        <p class="fade-in">
+            You're not logged in (or registered) yet so click on <a href="/login">login</a> or <a href="/register">register</a> to login or register.
+        </p>
+        {% else %}
+        <p>
+            Look at <a href="/postlist">my posts</a>!
+        </p>
+        {% endif %}
+    </div>
+    <hr>
+{% endblock %}
