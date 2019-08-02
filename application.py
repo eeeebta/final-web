@@ -177,16 +177,59 @@ def logout():
     return render_template("status.html", message=message, block_title=block_title[2])
 
 @app.route("/create_post")
+@login_required
 def create_post():
     user_id = session["user_id"]
     check_super_user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id":user_id}).fetchone()
-    if check_super_user:
-        print(check_super_user)
+    if check_super_user[4]:
+        print("IS SUPER USER")
+    else:
+        message = "You do not have permission to be here."
+        return render_template("status.html", message=message, block_title=block_title[0]), 400
 
 
 @app.route("/post_list")
 def list_posts():
     post_list = db.execute("SELECT * FROM posts").fetchall()
+
+@app.route("/admin", methods=["GET", "POST"])
+@login_required
+def admin():
+    if request.method == "POST":
+        try:
+            update_user = int(request.form.get("user_info"))
+            for a in range(15):
+                print("HIT TRY")
+        except:
+            update_user = "%" + request.form.get("user_info") + "%"
+            for a in range(15):
+                print("HIT EXCEPT")
+        # TODO
+        # Just change this so it is not returning like but instead equal to
+        if isinstance(update_user, int):
+            returned_users = db.execute("SELECT * FROM users WHERE user_id = :user_info", {"user_info": update_user}).fetchall()
+        else:
+            returned_users = db.execute("SELECT * FROM users WHERE username LIKE :user_info OR email LIKE :user_info", {"user_info": update_user}).fetchall()
+
+        for num in range(10):
+            print(returned_users)
+        if not update_user:
+            message = "You forgot to fill in the field"
+            return render_template("status.html", message=message, block_title=block_title[0]), 400
+        elif not returned_users:
+            
+            message = "Could not find that person in our database"
+            return render_template("status.html", message=message, block_title=block_title[0]), 400
+        return render_template("user_list.html", users=returned_users)
+    else:
+        user_id = session["user_id"]
+        check_super_user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id":user_id}).fetchone()
+        if check_super_user[4]:
+            return render_template("admin_page.html", block_title=block_title[0])
+        else:
+            message = "You do not have permission to be here."
+            return render_template("status.html", message=message, block_title=block_title[0]), 400
+    
 
 
 @app.route("/posts/<post_id>")
@@ -260,35 +303,25 @@ def bookpage(isbn):
     # Return the template with all the book information and reviews
     return render_template("bookpage.html", book_name=book_name, book_info=return_book, reviews=reviews, review_count=review_count)
 
-# I assume that no one will be posting to the api
-@app.route("/api/<isbn>", methods=["GET"])
-def api(isbn):
 
-    # Get the count of reviews
-    result = db.execute("SELECT COUNT(*) FROM reviews WHERE isbn = :isbn", {"isbn": isbn}).fetchall()
+@app.route("/make_admin/<update_user_id>")
+@login_required
+def make_admin(update_user_id):
+    user_id = session["user_id"]
+    check_super_user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id": user_id}).fetchone()
+    if check_super_user[4]:
+        try:
+            int(update_user_id)
+        except:
+            message = "That is not a valid ID."
+            return render_template("status.html", message=message, block_title=block_title[0]), 400
+        db.execute("UPDATE users SET superuser = :superuser_status WHERE user_id = :user_id", {"superuser_status": True, "user_id": update_user_id})
+        db.commit()
+        # TODO
+        # ADD BLOCK TITLE
+        return render_template("admin_page.html")
+    else:
+        message = "You do not have permission to be here."
+        return render_template("status.html", message=message, block_title=block_title[0]), 400
 
-    # Get book information
-    book = db.execute("SELECT * FROM books WHERE isbn = :isbn", {"isbn": isbn}).fetchone()
-
-    # Check if that isbn is associated with a book
-    if not book:
-        return jsonify({
-            "error": "isbn not found"
-            }), 404
     
-    # Prepare variables to passed to jsonify
-    review_count = result[0][0]
-    book_isbn = book[0]
-    book_title = book[1]
-    book_author = book[2]
-    book_year = book[3]
-
-    # I had it return everything like this, however it reorders it. 
-    # I assume this jsonify is just reordering the labels alphabetically.
-    return jsonify({
-        "title": book_title,
-        "author": book_author,
-        "year": book_year,
-        "isbn": book_isbn,
-        "review_count": review_count
-    })
