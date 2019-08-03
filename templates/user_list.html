@@ -1,0 +1,12 @@
+{% for user in users %}
+    <li>
+    user_name: {{ user[1] }}
+    user_id: {{ user[0] }}
+    user_email: {{ user[3] }}
+    <a> href="/make_admin/{{user_id}}"
+        <button>
+            Make Super User
+        </button>
+    </a>
+    </li>
+{% endfor %}

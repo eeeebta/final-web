@@ -1,7 +1,8 @@
 import os
 import requests
+import datetime
 
-from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for, jsonify
 from flask_session import Session
 from flask_mail import Mail
 
@@ -17,11 +18,11 @@ from helpers import login_required
 
 # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/
 
-UPLOAD_FOLDER = join(dirname(realpath(__file__)), 'static/images/')
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+UPLOAD_FOLDER = join(dirname(realpath(__file__)), "static/images/")
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
 # Check for environment variable
 if not os.getenv("DATABASE_URL"):
@@ -35,7 +36,7 @@ app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 
 # Secret key
-app.config['SECRET_KEY'] = os.getenv("SECRET_KEY")
+app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 
 Session(app)
 
@@ -188,9 +189,37 @@ def logout():
 
 # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/
 def allowed_file(filename):
-    return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+    return "." in filename and \
+           filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
 
+# Get the formatted date and time -- taken from project2
+def get_formatted_dt():
+    months = {
+        "01": "January", "02": "February", "03": "March",
+        "04": "April", "05": "May", "06": "June", "07": "July",
+        "08": "August", "09": "September", "10": "October",
+        "11": "November", "12": "December"}
+    time = str(datetime.datetime.now().strftime("%I:%M %p"))
+    date = str(datetime.datetime.now().date())
+    month = date[5:7]
+    month = months[month]
+    day = date[8:10]
+
+    # Get the correct ending for the day for the timestamp
+    if date[9] == "1":
+        dayStr = "st"
+    elif date[9] == "2":
+        dayStr = "nd"
+    elif date[9] == "3":
+        dayStr = "rd"
+    else:
+        dayStr = "th"
+
+    day = day + dayStr
+
+    timestamp = f"Posted at {time} on {month} {day}"
+
+    return timestamp
 
 @app.route("/create_post", methods=["POST", "GET"])
 @login_required
@@ -200,37 +229,72 @@ def create_post():
     if check_super_user[4]:
         if request.method == "POST":
             if not check_super_user[1]:
-                message = "There was an error."
+                message = "Error: Could not find your username."
                 return render_template("status.html", message=message)
-            #elif not request.form.get("post-body"):
-            #    message = "There was an error."
-            #    return render_template("status.html", message=message)
-            #if "file" not in request.files:
-            #    user_img = request.files['file']
-            #    for a in range(20):
-            #        print(user_img.filename)
-#
-#                return render_template("status.html")
-            # Got most of the code from this website with documentation on how to do a lot of this stuff:
+            elif not request.form.get("title"):
+                message = "Error: Could not find title/you forgot to enter a title."
+                return render_template("status.html", message=message)
+            elif not request.form.get("post-body"):
+                message = "Error: Could not get the post contents."
+                return render_template("status.html", message=message)
+
+            title = request.form.get("title")
+
+            date_posted = get_formatted_dt()
+
+            content = request.form.get("post-body")
+
+            author = check_super_user[1]
+            
+            returned_post = db.execute("SELECT * FROM posts WHERE title = :title", {"title": title}).fetchone()
+
+            if returned_post != None:
+                # TODO
+                # Do some JavaScript possibly so title can be changed
+                message = "Post with that title already exists"
+                return render_template("status.html", message=message)
+            
+            # Got most (basically all) of the code from this website with documentation on how to do a lot of this stuff:
             # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/
-            if 'file' in request.files:
+            if request.files["file"].filename != "":
                 # Never mind that just continue on and inject into database thru this path otherwise I will inject without img
-                user_img = request.files['file']
+                user_img = request.files["file"]
                 filename = ""
-                if user_img.filename == '':
-                    for a in range(20):
-                        print("ERROR")
-                    return render_template("status.html", message="error")
+                if user_img.filename == "":
+                    return render_template("status.html", message="Error: There was no file name found")
                 elif user_img and allowed_file(user_img.filename):
                     filename = secure_filename(user_img.filename)
-                    user_img.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-                    filepath = '/static/images/' + str(filename)
-                    return render_template('status.html', message=filepath, img_src=filepath)
-                # TODO FIX URL REDIRECT AND INSTEAD SEND TO POST
+                    filepath = "/static/images/" + str(filename)
+                    returned_posts = db.execute("SELECT * FROM posts WHERE image_path = :image_path", {"image_path": filepath}).fetchone()
+                    if returned_posts:
+                        message = "Image name already exists. Failed to create post."
+                        return render_template("status.html", message=message)
+                    user_img.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+                    db.execute("INSERT INTO posts (title, author, date_posted, content, image_path) VALUES (:title, :author, :date_posted, :content, :image_path)", {"title": title, "author": author, "date_posted": date_posted, "content": content, "image_path": filepath})
+                    db.commit()
+                    post_info = db.execute("SELECT * FROM posts WHERE title = :title", {"title": title}).fetchone()
+                    post_id = post_info[0]
+                    post_url = "post/" + str(post_id)
+                    # TODO FIX URL REDIRECT AND INSTEAD SEND TO POST
+                    return redirect(post_url)
                 else:
-                    return redirect(url_for("index"))
+                    if user_img.filename != "":
+                        filename = user_img.filename
+                        message = f"Error: This file ({filename}) is not accepted. Please provide an image."
+                        return render_template("status.html", message=message)
+                    else:
+                        message = f"Error: This file is not accepted or found. Please provide an image."
+                        return render_template("status.html", message=message)
+                    
             else:
-                return render_template("status.html", message='ERROR')
+                db.execute("INSERT INTO posts (title, author, date_posted, content) VALUES (:title, :author, :date_posted, :content)", {"title": title, "author": author, "date_posted": date_posted, "content": content})
+                db.commit()
+                post_info = db.execute("SELECT * FROM posts WHERE title = :title", {"title": title}).fetchone()
+                post_id = post_info[0]
+                post_url = "post/" + str(post_id)
+                return redirect(post_url)
+
+                
             #add_post = db.execute("INSERT INTO posts () VALUES ()", {})
             #db.commit()
         else:
@@ -243,6 +307,8 @@ def create_post():
 @app.route("/post_list")
 def list_posts():
     post_list = db.execute("SELECT * FROM posts").fetchall()
+    return render_template("post_list.html", posts=post_list)
+
 
 @app.route("/admin", methods=["GET", "POST"])
 @login_required
@@ -283,7 +349,7 @@ def admin():
     
 
 
-@app.route("/posts/<post_id>", methods=["GET"])
+@app.route("/post/<post_id>", methods=["GET"])
 def post(post_id):
     post = db.execute("SELECT * FROM posts WHERE post_id = :post_id", {"post_id": post_id}).fetchone()
     return render_template("post.html", post_info=post)
@@ -376,4 +442,14 @@ def make_admin(update_user_id):
         message = "You do not have permission to be here."
         return render_template("status.html", message=message, block_title=block_title[0]), 400
 
-    
+@app.route("/check_username", methods=["GET", "POST"])
+def check_username():
+    # Taken from my CS50's finance project
+    for a in range(10):
+        print("HIT CHECK_USERNAME")
+    username = request.args.get("username")
+    username_select = db.execute("SELECT * FROM users WHERE username = :username", {"username":username}).fetchone()
+    if len(username) >= 1 and username_select == None:
+        return jsonify(True)
+    else:
+        return jsonify(False)

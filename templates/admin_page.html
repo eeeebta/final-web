@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Make Super User
+{% endblock %}
+
+<!-- Taken from CS50 Finance -->
+
+{% block main %}
+    <div class="text-center">
+        <h1>
+            Admin Super User Page
+        </h1>
+        <form action="/admin" method="post">
+            <div class="form-group">
+                <input autocomplete="off" autofocus class="form-control" name="user_info" placeholder="Username, User ID, or Email" type="text">
+            </div>
+        </form>
+    </div>
+    
+    
+{% endblock %}
