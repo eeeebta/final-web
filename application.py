@@ -8,10 +8,20 @@ from flask_mail import Mail
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
+
+# https://stackoverflow.com/questions/37901716/flask-uploads-ioerror-errno-2-no-such-file-or-directory
+from os.path import join, dirname, realpath
 
 from helpers import login_required
 
+# https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/
+
+UPLOAD_FOLDER = join(dirname(realpath(__file__)), 'static/images/')
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+
 app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Check for environment variable
 if not os.getenv("DATABASE_URL"):
@@ -176,13 +186,55 @@ def logout():
     message = "Logged out!"
     return render_template("status.html", message=message, block_title=block_title[2])
 
-@app.route("/create_post")
+# https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@app.route("/create_post", methods=["POST", "GET"])
 @login_required
 def create_post():
     user_id = session["user_id"]
     check_super_user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id":user_id}).fetchone()
     if check_super_user[4]:
-        print("IS SUPER USER")
+        if request.method == "POST":
+            if not check_super_user[1]:
+                message = "There was an error."
+                return render_template("status.html", message=message)
+            #elif not request.form.get("post-body"):
+            #    message = "There was an error."
+            #    return render_template("status.html", message=message)
+            #if "file" not in request.files:
+            #    user_img = request.files['file']
+            #    for a in range(20):
+            #        print(user_img.filename)
+#
+#                return render_template("status.html")
+            # Got most of the code from this website with documentation on how to do a lot of this stuff:
+            # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/
+            if 'file' in request.files:
+                # Never mind that just continue on and inject into database thru this path otherwise I will inject without img
+                user_img = request.files['file']
+                filename = ""
+                if user_img.filename == '':
+                    for a in range(20):
+                        print("ERROR")
+                    return render_template("status.html", message="error")
+                elif user_img and allowed_file(user_img.filename):
+                    filename = secure_filename(user_img.filename)
+                    user_img.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                    filepath = '/static/images/' + str(filename)
+                    return render_template('status.html', message=filepath, img_src=filepath)
+                # TODO FIX URL REDIRECT AND INSTEAD SEND TO POST
+                else:
+                    return redirect(url_for("index"))
+            else:
+                return render_template("status.html", message='ERROR')
+            #add_post = db.execute("INSERT INTO posts () VALUES ()", {})
+            #db.commit()
+        else:
+            return render_template("create_post.html")
     else:
         message = "You do not have permission to be here."
         return render_template("status.html", message=message, block_title=block_title[0]), 400
@@ -217,7 +269,6 @@ def admin():
             message = "You forgot to fill in the field"
             return render_template("status.html", message=message, block_title=block_title[0]), 400
         elif not returned_users:
-            
             message = "Could not find that person in our database"
             return render_template("status.html", message=message, block_title=block_title[0]), 400
         return render_template("user_list.html", users=returned_users)
@@ -232,9 +283,10 @@ def admin():
     
 
 
-@app.route("/posts/<post_id>")
+@app.route("/posts/<post_id>", methods=["GET"])
 def post(post_id):
     post = db.execute("SELECT * FROM posts WHERE post_id = :post_id", {"post_id": post_id}).fetchone()
+    return render_template("post.html", post_info=post)
 
 
 @app.route("/search", methods=["GET", "POST"])
