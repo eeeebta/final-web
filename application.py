@@ -1,6 +1,9 @@
 import os
 import requests
 import datetime
+import re
+import string
+import random
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for, jsonify
 from flask_session import Session
@@ -19,14 +22,21 @@ from helpers import login_required
 # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/
 
 UPLOAD_FOLDER = join(dirname(realpath(__file__)), "static/images/")
-ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif"}
+VIDEO_FOLDER = join(dirname(realpath(__file__)), "static/videos/")
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "mp4"}
 
 app = Flask(__name__)
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 
-# Check for environment variable
+# Check for environment variables
 if not os.getenv("DATABASE_URL"):
     raise RuntimeError("DATABASE_URL is not set")
+elif not os.getenv("EMAIL_USERNAME"):
+    raise RuntimeError("EMAIL_USERNAME is not set (example@example.com)")
+elif not os.getenv("EMAIL_PASSWORD"):
+    raise RuntimeError("EMAIL_PASSWORD is not set (for gmail enable 2FA and gen an app password)")
+elif not os.getenv("EMAIL_SERVER"):
+    raise RuntimeError("EMAIL_SERVER is not set (for gmail use 'smtp.gmail.com')")
 
 # Ensure templates are auto-reloaded
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -38,6 +48,22 @@ app.config["SESSION_TYPE"] = "filesystem"
 # Secret key
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
 
+# Configure flask mail app
+# For obvious reasons I did not hardcode my own email details
+# Since this needs to be configured from os env, this requires
+# The export EMAIL_USERNAME=<username> command and same for 
+# EMAIL_PASSWORD and EMAIL_SERVER
+# https://stackoverflow.com/questions/37058567/configure-flask-mail-to-use-gmail
+# https://pythonhosted.org/Flask-Mail/
+app.config.update(
+    MAIL_SERVER = str(os.getenv("EMAIL_SERVER")),
+    MAIL_PORT = 465,
+    MAIL_USE_SSL = True,
+    MAIL_DEFAULT_SENDER = str(os.getenv("EMAIL_USERNAME")),
+    MAIL_USERNAME = str(os.getenv("EMAIL_USERNAME")),
+    MAIL_PASSWORD = str(os.getenv("EMAIL_PASSWORD"))
+)
+
 Session(app)
 
 mail = Mail(app)
@@ -48,6 +74,8 @@ db = scoped_session(sessionmaker(bind=engine))
 
 block_title = ["Error", "Success", "Logged out"]
 
+video_formats = ["mp4"]
+
 # Possibly another database for this? TODO
 common_passwords = []
 
@@ -55,6 +83,42 @@ common_passwords = []
 def index():
     return render_template("index.html")
 
+@app.route("/unsubscribe/<key>")
+def unsubscribe(key):
+    if not key:
+        message = "No key found"
+        return render_template("status.html", message=message, block_title=block_title[0])
+    else:
+        try:
+            user_id = unsub_keys[key]
+        except:
+            message = "Do not place keys in here randomly"
+            return render_template("status.html", message=message, block_title=block_title[0])
+        db.execute("UPDATE users SET subscribed = :status WHERE user_id = :user_id", {"user_id": user_id, "status": False})
+        message = "Unsubscribed!"
+        return render_template("status.html", message=message)
+
+# Probably will not happen but in case a key is generated and it was
+# already given to someone else I can store it here temporarily
+# since most likely the person unsubscribing will delete the email
+# I am not sure that a database would be useful here
+unsub_keys = {}
+global unsub_keys
+# Got the thing to generate the "key" from: https://stackoverflow.com/questions/2257441/random-string-generation-with-upper-case-letters-and-digits/23728630#23728630
+def gen_rand_key():
+    user_id = session["user_id"]
+    for _ in range(16):
+        key = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits))
+    unsub_keys[key] = user_id
+    return key
+    
+
+
+# https://stackoverflow.com/questions/49226806/python-check-for-a-valid-email
+# https://stackoverflow.com/questions/19030952/pep8-warning-on-regex-string-in-python-eclipse
+def validate_email(email):
+    return bool(re.match(
+        "^.+@(\\[?)[a-zA-Z0-9-.]+.([a-zA-Z]{2,3}|[0-9]{1,3})(]?)$", email))
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -64,9 +128,6 @@ def register():
     user_email = request.form.get("email")
     p1 = request.form.get("password")
     p2 = request.form.get("confirmation")
-
-    for num in range(10):
-        print(db.execute("SELECT * FROM users").fetchall())
 
     # User reached route via POST (as by submitting a form via POST)
     if request.method == "POST":
@@ -88,7 +149,10 @@ def register():
         elif not user_email:
             message = "Email not provided"
             return render_template("status.html", message=message, block_title=block_title[0]), 400
-        elif "@" not in user_email or (".com" or ".net") not in user_email:
+        
+        # If I was actually using this website I would probably just check for the ending that
+        # everyone has in their email address as school instead of using this to validate the email
+        elif not validate_email(user_email):
             message = "Not a valid email"
             return render_template("status.html", message=message, block_title=block_title[0]), 400
         # Our district gives us our own emails so it would be preferable
@@ -128,8 +192,11 @@ def register():
         # Logs in the user automatically
         session["user_id"] = result
 
+        # Store the superuser status in session for jinja
+        session["superuser"] = result[4]
+
         # Redirect user to home page
-        return redirect(url_for("search"))
+        return redirect(url_for("search_post"))
 
     # User reached route via GET (as by clicking a link or via redirect)
     else:
@@ -163,13 +230,14 @@ def login():
         rows = db.execute("SELECT * FROM users WHERE username = :username", {"username":request.form.get("username")}).fetchone()
 
         # Ensure username exists and password is correct
-        # Had to edit this a little from CS50 Finance because it no longer returns a dictionary but a list
-        if not check_password_hash(rows[2], request.form.get("password")):
+        # Also ensures that the user exists inside the database
+        if not rows or not check_password_hash(rows[2], request.form.get("password")):
             message = "Invalid username and/or password."
             return render_template("status.html", message=message, block_title=block_title[0]), 400
 
         # Remember which user has logged in
         session["user_id"] = rows[0]
+        session["superuser"] = rows[4]
 
         # Redirect user to search page
         return redirect(url_for("index"))
@@ -177,7 +245,6 @@ def login():
     # User reached route via GET (as by clicking a link or via redirect)
     else:
         return render_template("login.html")
-    
 
 
 @app.route("/logout")
@@ -186,6 +253,15 @@ def logout():
     session.clear()
     message = "Logged out!"
     return render_template("status.html", message=message, block_title=block_title[2])
+
+
+# TODO REMOVE
+#@app.route("/logout_status", methods=["GET", "POST"])
+#def logout_status():
+#    if logout_status_info:
+#        return jsonify(True)
+#    else:
+#        return jsonify(False)
 
 # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/
 def allowed_file(filename):
@@ -221,22 +297,25 @@ def get_formatted_dt():
 
     return timestamp
 
+# TODO ADD LOGIN REQUIRED
 @app.route("/create_post", methods=["POST", "GET"])
 @login_required
 def create_post():
     user_id = session["user_id"]
-    check_super_user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id":user_id}).fetchone()
-    if check_super_user[4]:
+    check_super = session["superuser"]
+    user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id":user_id}).fetchone()
+    user = user[1]
+    if check_super:
         if request.method == "POST":
-            if not check_super_user[1]:
+            if not user:
                 message = "Error: Could not find your username."
-                return render_template("status.html", message=message)
+                return render_template("status.html", message=message, block_title=block_title[0])
             elif not request.form.get("title"):
                 message = "Error: Could not find title/you forgot to enter a title."
-                return render_template("status.html", message=message)
+                return render_template("status.html", message=message, block_title=block_title[0])
             elif not request.form.get("post-body"):
                 message = "Error: Could not get the post contents."
-                return render_template("status.html", message=message)
+                return render_template("status.html", message=message, block_title=block_title[0])
 
             title = request.form.get("title")
 
@@ -244,7 +323,7 @@ def create_post():
 
             content = request.form.get("post-body")
 
-            author = check_super_user[1]
+            author = user
             
             returned_post = db.execute("SELECT * FROM posts WHERE title = :title", {"title": title}).fetchone()
 
@@ -252,47 +331,87 @@ def create_post():
                 # TODO
                 # Do some JavaScript possibly so title can be changed
                 message = "Post with that title already exists"
-                return render_template("status.html", message=message)
+                return render_template("status.html", message=message, block_title=block_title[0])
             
             # Got most (basically all) of the code from this website with documentation on how to do a lot of this stuff:
             # https://flask.palletsprojects.com/en/1.1.x/patterns/fileuploads/
             if request.files["file"].filename != "":
                 # Never mind that just continue on and inject into database thru this path otherwise I will inject without img
-                user_img = request.files["file"]
+                user_file = request.files["file"]
                 filename = ""
-                if user_img.filename == "":
+                if user_file.filename == "":
                     return render_template("status.html", message="Error: There was no file name found")
-                elif user_img and allowed_file(user_img.filename):
-                    filename = secure_filename(user_img.filename)
-                    filepath = "/static/images/" + str(filename)
+                elif user_file and allowed_file(user_file.filename):
+                    filename = secure_filename(user_file.filename)
+                    if filename[-3:] in video_formats:
+                        filepath = "/static/videos/" + str(filename)
+                    else:
+                        filepath = "/static/images/" + str(filename)
+                    
+                    if len(filepath) > 255:
+                        message = "Filename too long. Please make the file name shorter."
+                        return render_template("status.html", message=message, block_title=block_title[0])
+                    
                     returned_posts = db.execute("SELECT * FROM posts WHERE image_path = :image_path", {"image_path": filepath}).fetchone()
                     if returned_posts:
-                        message = "Image name already exists. Failed to create post."
-                        return render_template("status.html", message=message)
-                    user_img.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+                        message = "Image or video name already exists. Failed to create post."
+                        return render_template("status.html", message=message, block_title=block_title[0])
+                    if "videos" in filepath:
+                        user_file.save(os.path.join(VIDEO_FOLDER, filename))
+                    else:
+                        user_file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
                     db.execute("INSERT INTO posts (title, author, date_posted, content, image_path) VALUES (:title, :author, :date_posted, :content, :image_path)", {"title": title, "author": author, "date_posted": date_posted, "content": content, "image_path": filepath})
                     db.commit()
                     post_info = db.execute("SELECT * FROM posts WHERE title = :title", {"title": title}).fetchone()
                     post_id = post_info[0]
-                    post_url = "post/" + str(post_id)
+                    post_url_client = "post/" + str(post_id)
+
+                    # TODO possibly move to function
+                    # Send an email to everyone who is not an admin
+                    notify = db.execute("SELECT * FROM users WHERE superuser = :superuser AND subscribed = :subscribed", {"superuser": False, "subscribed": True}).fetchall()
+                    notify_people = []
+                    for person in notify:
+                        notify_people.append(person[3])
+                    url_root = request.url_root
+                    post_url = f"{url_root}post/{post_id}"
+                    title = f"New Post: {title}"
+                    unsub_url = f"{url_root}unsubscribe/"
+                    mail.send_message(
+                        title,
+                        recipients=notify_people,
+                        body=f"Hello! \n\nCheck out this new post! You can view it at: {post_url} \n\n- Some closing for this email \n\nUnsubscribe here if you no longer want these emails: {unsub_url}")
+                    
                     # TODO FIX URL REDIRECT AND INSTEAD SEND TO POST
-                    return redirect(post_url)
+                    return redirect(post_url_client)
                 else:
-                    if user_img.filename != "":
-                        filename = user_img.filename
+                    if user_file.filename != "":
+                        filename = user_file.filename
                         message = f"Error: This file ({filename}) is not accepted. Please provide an image."
-                        return render_template("status.html", message=message)
+                        return render_template("status.html", message=message, block_title=block_title[0])
                     else:
                         message = f"Error: This file is not accepted or found. Please provide an image."
-                        return render_template("status.html", message=message)
+                        return render_template("status.html", message=message, block_title=block_title[0])
                     
             else:
                 db.execute("INSERT INTO posts (title, author, date_posted, content) VALUES (:title, :author, :date_posted, :content)", {"title": title, "author": author, "date_posted": date_posted, "content": content})
                 db.commit()
                 post_info = db.execute("SELECT * FROM posts WHERE title = :title", {"title": title}).fetchone()
                 post_id = post_info[0]
-                post_url = "post/" + str(post_id)
-                return redirect(post_url)
+                post_url_client = "post/" + str(post_id)
+
+                # Send an email to everyone who is not an admin
+                notify = db.execute("SELECT * FROM users WHERE superuser = :superuser", {"superuser": False}).fetchall()
+                notify_people = []
+                for person in notify:
+                    notify_people.append(person[3])
+                url_root = request.url_root
+                post_url = f"{url_root}post/{post_id}"
+                title = f"New Post: {title}"
+                mail.send_message(
+                    title,
+                    recipients=notify_people,
+                    body=f"Hello! \n\nCheck out this new post! You can view it at: {post_url} \n\n - Some closing for this email")
+                return redirect(post_url_client)
 
                 
             #add_post = db.execute("INSERT INTO posts () VALUES ()", {})
@@ -304,7 +423,7 @@ def create_post():
         return render_template("status.html", message=message, block_title=block_title[0]), 400
 
 
-@app.route("/post_list")
+@app.route("/post_list", methods=["GET"])
 def list_posts():
     post_list = db.execute("SELECT * FROM posts").fetchall()
     return render_template("post_list.html", posts=post_list)
@@ -316,12 +435,8 @@ def admin():
     if request.method == "POST":
         try:
             update_user = int(request.form.get("user_info"))
-            for a in range(15):
-                print("HIT TRY")
         except:
             update_user = "%" + request.form.get("user_info") + "%"
-            for a in range(15):
-                print("HIT EXCEPT")
         # TODO
         # Just change this so it is not returning like but instead equal to
         if isinstance(update_user, int):
@@ -340,8 +455,10 @@ def admin():
         return render_template("user_list.html", users=returned_users)
     else:
         user_id = session["user_id"]
-        check_super_user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id":user_id}).fetchone()
-        if check_super_user[4]:
+        check_super = session["superuser"]
+        user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id":user_id}).fetchone()
+        user = user[1]
+        if check_super:
             return render_template("admin_page.html", block_title=block_title[0])
         else:
             message = "You do not have permission to be here."
@@ -352,12 +469,16 @@ def admin():
 @app.route("/post/<post_id>", methods=["GET"])
 def post(post_id):
     post = db.execute("SELECT * FROM posts WHERE post_id = :post_id", {"post_id": post_id}).fetchone()
+    if not post:
+        message = "Could not find that post."
+        return render_template("status.html", message=message, block_title=block_title[0])
     return render_template("post.html", post_info=post)
 
 
-@app.route("/search", methods=["GET", "POST"])
+# UPDATE THIS TODO
+@app.route("/search_posts", methods=["GET", "POST"])
 @login_required
-def search():
+def search_posts():
 
     # Test
     if request.method == "POST":
@@ -392,42 +513,17 @@ def search():
             return render_template("status.html", message=message, block_title=block_title[0]), 400
         return render_template("booklist.html", books=qr)
     else:
-        return render_template("search.html")
-
-
-@app.route("/book/<isbn>", methods=["GET"])
-@login_required
-def bookpage(isbn):
-
-    # Code from project1 page
-    res = requests.get("https://www.goodreads.com/book/review_counts.json", params={"key": "PklbHNIY4DCcBKaFL3B8qw", "isbns": isbn})
-    book = res.json()
-
-    # Returned book info from JSON
-    return_book = book["books"][0]
-
-    # Book name and info from database
-    book_name = db.execute("SELECT * FROM books WHERE isbn = :isbn", {"isbn": isbn}).fetchone()
-
-    # How many reviews there are in my database for the specific book
-    review_count = db.execute("SELECT COUNT(*) FROM reviews WHERE isbn = :isbn", {"isbn": isbn}).fetchall()
-
-    # This is the real count
-    review_count = review_count[0][0]
-
-    # Selects all reviews from database
-    reviews = db.execute("SELECT review FROM reviews WHERE isbn = :isbn", {"isbn": isbn}).fetchall()
-
-    # Return the template with all the book information and reviews
-    return render_template("bookpage.html", book_name=book_name, book_info=return_book, reviews=reviews, review_count=review_count)
+        return render_template("search_posts.html")
 
 
 @app.route("/make_admin/<update_user_id>")
 @login_required
 def make_admin(update_user_id):
     user_id = session["user_id"]
-    check_super_user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id": user_id}).fetchone()
-    if check_super_user[4]:
+    check_super = session["superuser"]
+    user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id": user_id}).fetchone()
+    user = user[1]
+    if check_super:
         try:
             int(update_user_id)
         except:
@@ -437,19 +533,30 @@ def make_admin(update_user_id):
         db.commit()
         # TODO
         # ADD BLOCK TITLE
-        return render_template("admin_page.html")
+        return render_template("admin_page.html", block_title="Admin")
     else:
         message = "You do not have permission to be here."
         return render_template("status.html", message=message, block_title=block_title[0]), 400
 
+# Used for ajax and to inform user as to if the username is available
 @app.route("/check_username", methods=["GET", "POST"])
 def check_username():
     # Taken from my CS50's finance project
-    for a in range(10):
-        print("HIT CHECK_USERNAME")
     username = request.args.get("username")
-    username_select = db.execute("SELECT * FROM users WHERE username = :username", {"username":username}).fetchone()
+    username_select = db.execute("SELECT * FROM users WHERE username = :username", {"username": username}).fetchone()
     if len(username) >= 1 and username_select == None:
+        return jsonify(True)
+    else:
+        return jsonify(False)
+
+# Same thing as the function above, except this time it is used to make sure the post is valid
+@app.route("/check_post", methods=["GET", "POST"])
+def check_title():
+    # The same code used for checking the validity of the post
+    title = request.args.get("title")
+    posts = db.execute("SELECT * FROM posts WHERE title = :title", {"title": title}).fetchone()
+    title = str(title)
+    if len(title) >= 1 and posts == None:
         return jsonify(True)
     else:
         return jsonify(False)

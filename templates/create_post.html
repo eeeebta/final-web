@@ -11,20 +11,20 @@
         <h1>
             Create Post
         </h1>
-        <form action="/create_post" method="post" enctype=multipart/form-data>
+        <form action="/create_post" name="form" method="post" enctype=multipart/form-data>
             <div class="form-group">
-                <input class="form-control" autocomplete="off" autofocus name="title" placeholder="Title..." type="text">
+                <input class="form-control" autocomplete="off" autofocus id="title" name="title" placeholder="Title..." type="text">
             </div>
             <br>
             <div>
                 <h5>Text Content:</h5>
-                <textarea name="post-body" cols=100 rows=10 placeholder="Lorem ipsum dolor sit amet..."></textarea>
+                <textarea id="post-body" class="form-control" id="post-body" name="post-body" placeholder="Lorem ipsum dolor sit amet..."></textarea>
             </div>
             <br>
             <!-- https://www.w3schools.com/bootstrap4/bootstrap_forms_custom.asp -->
             <div class="custom-file">
                 <h6>If you decide to upload an image then please make sure it is a unique name</h6>
-                <input type="file" name="file" class="custom-file-input" id="customFile">
+                <input type="file" name="file" class="custom-file-input" id="customFile" accept="image/*|video/*">
                 <label class="custom-file-label" for="customFile">Choose file (optional)</label>
             </div>
             <br>
@@ -32,7 +32,7 @@
             <button class="btn btn-primary" type="submit">Create Post</button>
         </form>
         <!-- This script needs to be loaded after the upload -->
-        <script src="{{ url_for('static', filename='scripts.js') }}"></script>
+        <script src="{{ url_for('static', filename='create_post.js') }}"></script>
     </div>
     
 {% endblock %}

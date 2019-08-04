@@ -4,23 +4,22 @@
     Posts
 {% endblock %}
 
-<!-- Taken from CS50's finance that I completed -->
-
 {% block main %}
     <div class="text-center">
         <h1>
             Posts
         </h1>
-        {% for post in posts %}
-            <div>
-                <ul>
-                    <li>
-                        {{ post }}
+        <div>
+            <ul class="list-group">
+                {% for post in posts|reverse %}
+                    <li class="list-group-item">
+                        <a href="post/{{post[0]}}">{{ post[1] }} by {{ post[2] }}</a>
                         <br>
-                        <a href="posts/{{post_id}}">Click to view</a>
+                        <small><i>{{ post[3]}}</i></small>
                     </li>
-                </ul>
-            </div>
+                {% endfor %}
+            </ul>
+        </div>
     </div>
     
 {% endblock %}

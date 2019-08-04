@@ -24,12 +24,13 @@
             This website will only allow people with emails from the same district as me, but I have disabled it here for demonstration purposes.
         </p>
         {% if not session.user_id %}
-        <p class="fade-in">
-            You're not logged in (or registered) yet so click on <a href="/login">login</a> or <a href="/register">register</a> to login or register.
+        <p>
+            <div class="bigText">You're not logged in (or registered) yet so click on <a href="/login">login</a> or <a href="/register">register</a> to login or register.</div>
+            <div class="smallText">Click <a href="/login">here</a>  to login or click <a href="/register">here</a> to register</div>
         </p>
         {% else %}
         <p>
-            Look at <a href="/postlist">my posts</a>!
+            Look at <a href="/post_list">my posts</a>!
         </p>
         {% endif %}
     </div>

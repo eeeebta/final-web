@@ -1,0 +1,37 @@
+.user-fields
+{
+    /* center form controls */
+    display: inline-block;
+
+    /* override Bootstrap's 100% width for form controls */
+    width: auto;
+
+    align-content: center;
+}
+
+.bigText {
+    display: inline-block;
+}
+
+.smallText {
+    display: none;
+}
+
+@media screen and (max-width: 720px) {
+    .smallText {
+        display: inline-block;
+    }
+    .bigText {
+        display: none;
+    }
+}
+
+img, video {
+    width: 75%;
+}
+
+@media screen and (max-width: 720px) {
+    img, video {
+        height: 50%;
+    }
+}

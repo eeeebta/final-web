@@ -1,3 +1,44 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    {{ post_info[1] }}
+{% endblock %}
+
+<!-- Taken from CS50's finance that I completed -->
+
+{% block main %}
+    <div class="text-center">
+        <h1>
+            {{ post_info[1] }} by {{ post_info[2] }}
+        </h1>
+        <small><i>{{post_info[3]}}</i></small>
+        <!-- Image is placed here if it exists -->
+        {% if post_info[5] != None and "images" in post_info[5] %}
+            <hr>
+            <div>
+                <img src="{{post_info[5]}}">
+            </div>
+        {% elif post_info[5] != None and "videos" in post_info[5] %}
+            <hr>
+            <div>
+                <video controls><source src="{{post_info[5]}}" type="video/{{post_info[5][-3:]}}"></video>
+            </div>
+        {% endif %}
+        <hr>
+        <div>
+            <p>
+                {{ post_info[4] }}
+            </p>
+        </div>
+        <hr>
+        <a href="/post_list"><button class="btn btn-primary">Back to post list</button></a>
+    </div>
+    
+{% endblock %}
+
+
+
+
 {{ post_info }}
 
 {% for item in post_info %}

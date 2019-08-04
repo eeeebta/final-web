@@ -1,3 +1,35 @@
-{{ message }}
-<!-- TODO Actually finish this page and make it look good have have a section to test images-->
-<img src={{message}}> 
+{% extends "layout.html" %}
+
+{% block title %}
+    {{ block_title }}
+{% endblock %}
+
+<!-- Taken from CS50's finance that I completed -->
+
+{% block main %}
+    <div class="text-center">
+        {% if block_title == "Error" %}
+        <h1>
+            There was an error :(
+        </h1>
+        {% else %}
+        <h1>
+            Success :)
+        </h1>
+        {% endif %}
+        <br>
+        <div>
+            <b>
+                <h5>
+                    {{ message }}
+                </h5>
+            </b>
+        </div>
+        <br>
+        <div>
+            You will be redirected to the home page soon.
+        </div>
+        <script src="{{ url_for('static', filename='status.js') }}"></script>
+    </div>
+    
+{% endblock %}

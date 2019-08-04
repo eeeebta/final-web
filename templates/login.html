@@ -11,15 +11,16 @@
         <h1>
             Log in
         </h1>
-        <form action="/login" method="post">
+        <form action="/login" name="form" method="post">
             <div class="form-group">
-                <input class="form-control" autocomplete="off" autofocus name="username" placeholder="Username" type="text">
+                <input class="form-control user-fields" autocomplete="off" id="username" autofocus name="username" placeholder="Username" type="text">
             </div>
             <div class="form-group">
-                <input class="form-control" name="password" placeholder="Password" type="password">
+                <input class="form-control user-fields" id="password" name="password" placeholder="Password" type="password">
             </div>
             <button class="btn btn-primary" type="submit">Log In</button>
         </form>
+        <script src="{{ url_for('static', filename='login.js') }}"></script>
     </div>
     
 {% endblock %}
