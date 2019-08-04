@@ -7,7 +7,7 @@ import random
 
 from flask import Flask, flash, jsonify, redirect, render_template, request, session, url_for, jsonify
 from flask_session import Session
-from flask_mail import Mail
+from flask_mail import Mail, Message
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
@@ -91,10 +91,13 @@ def unsubscribe(key):
     else:
         try:
             user_id = unsub_keys[key]
+            for a in range(30):
+                print(unsub_keys)
         except:
-            message = "Do not place keys in here randomly"
+            message = "Invalid key"
             return render_template("status.html", message=message, block_title=block_title[0])
-        db.execute("UPDATE users SET subscribed = :status WHERE user_id = :user_id", {"user_id": user_id, "status": False})
+        e = db.execute("UPDATE users SET subscribed = :status WHERE user_id = :user_id", {"status": False, "user_id": user_id})
+        db.commit()
         message = "Unsubscribed!"
         return render_template("status.html", message=message)
 
@@ -103,12 +106,13 @@ def unsubscribe(key):
 # since most likely the person unsubscribing will delete the email
 # I am not sure that a database would be useful here
 unsub_keys = {}
-global unsub_keys
 # Got the thing to generate the "key" from: https://stackoverflow.com/questions/2257441/random-string-generation-with-upper-case-letters-and-digits/23728630#23728630
-def gen_rand_key():
-    user_id = session["user_id"]
+def gen_rand_key(user_id):
+    global unsub_keys
+    user_id = user_id
+    key = ""
     for _ in range(16):
-        key = ''.join(random.SystemRandom().choice(string.ascii_uppercase + string.digits))
+        key += "".join(random.SystemRandom().choice(string.ascii_uppercase + string.digits))
     unsub_keys[key] = user_id
     return key
     
@@ -193,7 +197,8 @@ def register():
         session["user_id"] = result
 
         # Store the superuser status in session for jinja
-        session["superuser"] = result[4]
+        superuser = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id": session["user_id"]})
+        session["superuser"] = superuser[4]
 
         # Redirect user to home page
         return redirect(url_for("search_post"))
@@ -301,8 +306,12 @@ def get_formatted_dt():
 @app.route("/create_post", methods=["POST", "GET"])
 @login_required
 def create_post():
-    user_id = session["user_id"]
-    check_super = session["superuser"]
+    try:
+        user_id = session["user_id"]
+        check_super = session["superuser"]
+    except:
+        message = "There was an error. You may not have access to view this page."
+        return render_template("status.html", message=message, block_title=block_title[0])
     user = db.execute("SELECT * FROM users WHERE user_id = :user_id", {"user_id":user_id}).fetchone()
     user = user[1]
     if check_super:
@@ -312,6 +321,9 @@ def create_post():
                 return render_template("status.html", message=message, block_title=block_title[0])
             elif not request.form.get("title"):
                 message = "Error: Could not find title/you forgot to enter a title."
+                return render_template("status.html", message=message, block_title=block_title[0])
+            elif len(str(request.form.get("title"))) > 255:
+                message = "Title too long. Shorten the title"
                 return render_template("status.html", message=message, block_title=block_title[0])
             elif not request.form.get("post-body"):
                 message = "Error: Could not get the post contents."
@@ -369,17 +381,24 @@ def create_post():
                     # TODO possibly move to function
                     # Send an email to everyone who is not an admin
                     notify = db.execute("SELECT * FROM users WHERE superuser = :superuser AND subscribed = :subscribed", {"superuser": False, "subscribed": True}).fetchall()
-                    notify_people = []
-                    for person in notify:
-                        notify_people.append(person[3])
+                    #notify_people = []
+                    #for person in notify:
+                    #    notify_people.append(person[3])
                     url_root = request.url_root
                     post_url = f"{url_root}post/{post_id}"
                     title = f"New Post: {title}"
-                    unsub_url = f"{url_root}unsubscribe/"
-                    mail.send_message(
-                        title,
-                        recipients=notify_people,
-                        body=f"Hello! \n\nCheck out this new post! You can view it at: {post_url} \n\n- Some closing for this email \n\nUnsubscribe here if you no longer want these emails: {unsub_url}")
+                    
+                    for person in notify:
+                        key = gen_rand_key(int(person[0]))
+                        email = person[3]
+                        unsub_url = f"{url_root}unsubscribe/{key}"
+                        person = str(person[1])
+                        for a in range(30):
+                            print(person)
+                        mail.send_message(
+                            title,
+                            recipients=email,
+                            body=f"Hello, {person}! \n\nCheck out this new post! You can view it at: {post_url} \n\n- Some closing for this email \n\n Unsubscribe here if you no longer want these emails: {unsub_url}")
                     
                     # TODO FIX URL REDIRECT AND INSTEAD SEND TO POST
                     return redirect(post_url_client)
@@ -400,17 +419,25 @@ def create_post():
                 post_url_client = "post/" + str(post_id)
 
                 # Send an email to everyone who is not an admin
-                notify = db.execute("SELECT * FROM users WHERE superuser = :superuser", {"superuser": False}).fetchall()
-                notify_people = []
-                for person in notify:
-                    notify_people.append(person[3])
+                notify = db.execute("SELECT * FROM users WHERE superuser = :superuser AND subscribed = :subscribed", {"superuser": False, "subscribed": True}).fetchall()
+                #notify_people = []
+                #for person in notify:
+                #    notify_people.append(person[3])
                 url_root = request.url_root
                 post_url = f"{url_root}post/{post_id}"
                 title = f"New Post: {title}"
-                mail.send_message(
-                    title,
-                    recipients=notify_people,
-                    body=f"Hello! \n\nCheck out this new post! You can view it at: {post_url} \n\n - Some closing for this email")
+                with mail.connect() as conn:
+                    for person in notify:
+                        key = gen_rand_key(person[0])
+                        email = person[3]
+                        unsub_url = f"{url_root}unsubscribe/{key}"
+                        subject = title
+                        message = f"Hello, {person[1]}! \n\nCheck out this new post! You can view it at: {post_url} \n\n- Some closing for this email \n\n Unsubscribe here if you no longer want these emails: {unsub_url}"
+                        msg = Message(recipients=email.split(),
+                        body=message,
+                        subject=subject)
+                        conn.send(msg)
+                            
                 return redirect(post_url_client)
 
                 
