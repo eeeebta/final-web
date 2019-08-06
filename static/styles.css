@@ -1,4 +1,4 @@
-.user-fields
+.userFields
 {
     /* center form controls */
     display: inline-block;
@@ -17,6 +17,8 @@
     display: none;
 }
 
+/* I am not sure about all other devices but a regular iPhone 8 has a width of 720 px
+and that seems to be a lot of users have this width so I have just went with 720px */
 @media screen and (max-width: 720px) {
     .smallText {
         display: inline-block;

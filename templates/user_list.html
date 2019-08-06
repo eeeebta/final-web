@@ -1,12 +1,31 @@
-{% for user in users %}
-    <li>
-    user_name: {{ user[1] }}
-    user_id: {{ user[0] }}
-    user_email: {{ user[3] }}
-    <a> href="/make_admin/{{user_id}}"
-        <button>
-            Make Super User
-        </button>
-    </a>
-    </li>
-{% endfor %}
+{% extends "layout.html" %}
+
+{% block title %}
+    User List
+{% endblock %}
+
+{% block main %}
+    <div class="text-center">
+        <h1>
+            Users found
+        </h1>
+        <div class="form-group">
+            <ul class="list-group">
+                {% for user in users %}
+                    <li class="list-group-item">
+                        <b>User ID:</b> {{ user[0] }}
+                        <br>
+                        <b>Username:</b> {{ user[1] }}
+                        <br>
+                        <b>Email:</b> {{ user[3] }}
+                        <br>
+                        <!-- https://stackoverflow.com/questions/6515502/javascript-form-submit-confirm-or-cancel-submission-dialog-box -->
+                        <form id="form" name="form" onsubmit="return confirm('Are you sure you want to make {{ user[1] }} a super user (admin)');" action="/make_admin/{{user[0]}}" method="POST">
+                            <button class="btn btn-primary" type="submit">Make super user</button>
+                        </form>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Search
+{% endblock %}
+
+<!-- Taken from CS50's finance that I completed -->
+
+{% block main %}
+    <div class="text-center">
+        <h1>
+            Search for a post
+        </h1>
+        <div>
+            <form action="/search_posts" name="form" method="post">
+                <div class="form-group">
+                    <input class="form-control userFields" id="search" name="search" placeholder="Post name..." type="text">
+                </div>
+            <!-- Possibly implement an ajax method here where I can type and as typing i pull up articles relating to it -->
+            </form>
+        </div>
+        <script src="{{ url_for('static', filename='search_posts.js') }}"></script>
+    </div>
+    
+{% endblock %}

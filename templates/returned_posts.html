@@ -1,0 +1,27 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Returned Posts
+{% endblock %}
+
+{% block main %}
+    <div class="text-center">
+        <h1>
+            These posts were found:
+        </h1>
+        <div>
+            <ul class="list-group">
+                {% for post in returned_posts %}
+                    <li class="list-group-item">
+                        <b>Post Title:</b> {{ post[1] }}
+                        <br>
+                        <b>Post Author:</b> {{ post[2] }}
+                        <br>
+                        <i>{{ post[3] }}</i>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+    
+{% endblock %}

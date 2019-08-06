@@ -4,16 +4,21 @@
     Make Super User
 {% endblock %}
 
-<!-- Taken from CS50 Finance -->
-
 {% block main %}
     <div class="text-center">
         <h1>
             Admin Super User Page
         </h1>
+        <h5>Make someone an admin or super user</h5>
+        {% if message %}
+            <div>
+                <h6>{{ message }}</h6>
+            </div>
+        {% endif %}
+        <br>
         <form action="/admin" method="post">
             <div class="form-group">
-                <input autocomplete="off" autofocus class="form-control" name="user_info" placeholder="Username, User ID, or Email" type="text">
+                <input autocomplete="off" autofocus class="form-control" name="user_info" placeholder="Username, User ID, or Email (Or just leave empty to view everyone who is not an admin)" type="text">
             </div>
         </form>
     </div>
