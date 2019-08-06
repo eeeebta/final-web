@@ -1,5 +1,4 @@
 import os
-import requests
 import datetime
 import re
 import string
