@@ -105,6 +105,8 @@ def index():
             subject="Admin password",
             recipients=email.split()
         )
+
+        # Send message
         mail.send(msg)
 
     return render_template("index.html")
@@ -121,13 +123,22 @@ def unsub_nokey():
 # Unsubscribe a user using the key
 @app.route("/unsubscribe/<key>")
 def unsubscribe(key):
+
+    # If the key exists in the unsub keys then grab the user id
     if key in unsub_keys:
         user_id = unsub_keys[key]
+
+    # If it does not exist then return the status template with the invalid key message
     else:
         message = "Invalid key"
         return render_template("status.html", message=message, block_title=block_title[0]), 400
+
+    # Update the subscribed status
     e = db.execute("UPDATE users SET subscribed = :status WHERE user_id = :user_id", {"status": False, "user_id": user_id})
+
+    # Save it
     db.commit()
+
     message = "Unsubscribed!"
     return render_template("status.html", message=message)
 
@@ -154,6 +165,8 @@ def gen_rand_key(user_id):
 
     # Add the key to unsub keys and the respective user_id
     unsub_keys[key] = user_id
+
+    # Return the key
     return key
 
 # Generate a password for admin
@@ -167,6 +180,7 @@ def gen_pass():
 # https://stackoverflow.com/questions/49226806/python-check-for-a-valid-email
 # https://stackoverflow.com/questions/19030952/pep8-warning-on-regex-string-in-python-eclipse
 def validate_email(email):
+    # Validate email using regex
     return bool(re.match(
         "^.+@(\\[?)[a-zA-Z0-9-.]+.([a-zA-Z]{2,3}|[0-9]{1,3})(]?)$", email))
 

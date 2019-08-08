@@ -12,7 +12,7 @@ My database has two tables. One was a users table with the columns of user_id (p
 
 ## Other import information
 
-In order to run this you HAVE to run these commands: 
+In order to run this you HAVE to run these commands:
 
 export FLASK_APP=application.py
 
