@@ -661,9 +661,9 @@ def make_admin(update_user_id):
 
     # If they are a super user then allow them to make the other person into an admin
     if check_super:
-        if isinstance(update_user_id, int):
+        try:
             int(update_user_id)
-        else:
+        except:
             message = "That is not a valid ID."
             return render_template("status.html", message=message, block_title=block_title[0]), 400
         db.execute("UPDATE users SET superuser = :superuser_status WHERE user_id = :user_id", {"superuser_status": True, "user_id": update_user_id})
