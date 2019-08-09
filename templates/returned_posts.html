@@ -13,11 +13,13 @@
             <ul class="list-group">
                 {% for post in returned_posts %}
                     <li class="list-group-item">
-                        <b>Post Title:</b> {{ post[1] }}
+                        <b>Post Title:</b> <a href="post/{{ post[0] }}">{{ post[1] }}</a> 
                         <br>
                         <b>Post Author:</b> {{ post[2] }}
                         <br>
                         <i>{{ post[3] }}</i>
+                        <br>
+                        <a href="post/{{ post[0] }}">Click here to go to the post (or the title)</a>
                     </li>
                 {% endfor %}
             </ul>
