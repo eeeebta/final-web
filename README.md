@@ -1,4 +1,4 @@
-# final-project
+# final-project (CS50W's final)
 
 ## Project Description
 
